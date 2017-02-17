@@ -69,7 +69,7 @@ public class GestureCameraView extends JavaCameraView implements Camera.PictureC
 
         mCamera.setPreviewCallback(null);
 
-        mCamera.takePicture(null, null, null);
+        mCamera.takePicture(null, null, this);
     }
 
     @Override

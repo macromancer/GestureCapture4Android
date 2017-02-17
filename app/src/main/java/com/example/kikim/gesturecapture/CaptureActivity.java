@@ -21,7 +21,11 @@ import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.core.Core;
 import org.opencv.core.Mat;
+import org.opencv.core.Point;
+import org.opencv.core.Scalar;
+import org.opencv.imgproc.Imgproc;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -33,10 +37,9 @@ public class CaptureActivity extends Activity implements CameraBridgeViewBase.Cv
 
     private GestureCameraView mOpenCVCameraView;
     private List<Camera.Size> mResolutionList;
-    private MenuItem[] mEffectMenuItems;
     private SubMenu mColorEffectsMenu;
-    private MenuItem[] mResolutionMenuItems;
     private SubMenu mResolutionMenu;
+    private SubMenu mGesturesMenu;
 
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -72,7 +75,8 @@ public class CaptureActivity extends Activity implements CameraBridgeViewBase.Cv
 
         // Example of a call to a native method
         TextView tv = (TextView) findViewById(R.id.sample_text);
-        tv.setText(stringFromJNI());
+        tv.setText("Pointing Thumb Up");
+        //tv.setText(stringFromJNI());
     }
 
     @Override
@@ -110,7 +114,10 @@ public class CaptureActivity extends Activity implements CameraBridgeViewBase.Cv
     }
 
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-        return inputFrame.rgba();
+
+        Mat img = inputFrame.rgba();
+        Imgproc.circle(img, new Point(200, 100), 20, new Scalar(200));
+        return img;
     }
 
     @Override
@@ -123,29 +130,28 @@ public class CaptureActivity extends Activity implements CameraBridgeViewBase.Cv
         }
 
         mColorEffectsMenu = menu.addSubMenu("Color Effect");
-        mEffectMenuItems = new MenuItem[effects.size()];
 
         int idx = 0;
-        ListIterator<String> effectItr = effects.listIterator();
-        while(effectItr.hasNext()) {
-            String element = effectItr.next();
-            mEffectMenuItems[idx] = mColorEffectsMenu.add(1, idx, Menu.NONE, element);
+        for(String effect : effects) {
+            mColorEffectsMenu.add(1, idx, Menu.NONE, effect);
             idx++;
         }
 
+
         mResolutionMenu = menu.addSubMenu("Resolution");
         mResolutionList = mOpenCVCameraView.getResolutionList();
-        mResolutionMenuItems = new MenuItem[mResolutionList.size()];
 
-        ListIterator<Camera.Size> resolutionItr = mResolutionList.listIterator();
         idx = 0;
-        while(resolutionItr.hasNext()) {
-            Camera.Size element = resolutionItr.next();
-            mResolutionMenuItems[idx] = mResolutionMenu.add(2, idx, Menu.NONE,
+        for(Camera.Size element : mResolutionList) {
+            mResolutionMenu.add(2, idx, Menu.NONE,
                     Integer.valueOf(element.width).toString() + "x" +
                     Integer.valueOf(element.height).toString());
             idx++;
         }
+
+        mGesturesMenu = menu.addSubMenu("Gesture");
+        mGesturesMenu.add(3,  0, Menu.NONE, "Pointing Thumb Up");
+        mGesturesMenu.add(3,  1, Menu.NONE, "Pointing Thumb Fold");
 
         return true;
     }
@@ -165,6 +171,13 @@ public class CaptureActivity extends Activity implements CameraBridgeViewBase.Cv
             String caption = Integer.valueOf(resolution.width).toString() + "x" +
                              Integer.valueOf(resolution.height).toString();
             Toast.makeText(this, caption, Toast.LENGTH_SHORT).show();
+        }
+        else if (item.getGroupId() == 3) {
+            String gesture = item.toString();
+            Toast.makeText(this, gesture, Toast.LENGTH_SHORT).show();
+
+            TextView tv = (TextView) findViewById(R.id.sample_text);
+            tv.setText(gesture);
         }
 
         return true;
