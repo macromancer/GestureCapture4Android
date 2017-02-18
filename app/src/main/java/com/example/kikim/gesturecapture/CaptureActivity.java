@@ -3,9 +3,8 @@ package com.example.kikim.gesturecapture;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.hardware.Camera;
-import android.os.Environment;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.os.Environment;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -21,18 +20,22 @@ import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
-import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.Point;
 import org.opencv.core.Scalar;
+import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
-import java.util.ListIterator;
+import java.util.Locale;
+import java.util.Random;
+import java.util.Timer;
+import java.util.TimerTask;
 
-public class CaptureActivity extends Activity implements CameraBridgeViewBase.CvCameraViewListener2, View.OnTouchListener{
+public class CaptureActivity extends Activity implements CameraBridgeViewBase.CvCameraViewListener2, View.OnTouchListener {
     private static final String TAG = "GCapture::Activity";
 
     private GestureCameraView mOpenCVCameraView;
@@ -40,6 +43,16 @@ public class CaptureActivity extends Activity implements CameraBridgeViewBase.Cv
     private SubMenu mColorEffectsMenu;
     private SubMenu mResolutionMenu;
     private SubMenu mGesturesMenu;
+
+    private int marker_x = 400;
+    private int marker_y = 200;
+    private int radius = 50;
+    private int period = 3600;
+
+    private Random rand = new Random();
+
+    private Timer timer;
+    private long startTime;
 
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -75,8 +88,18 @@ public class CaptureActivity extends Activity implements CameraBridgeViewBase.Cv
 
         // Example of a call to a native method
         TextView tv = (TextView) findViewById(R.id.sample_text);
-        tv.setText("Pointing Thumb Up");
+        tv.setText("Pointing_Thumb_Up");
         //tv.setText(stringFromJNI());
+    }
+
+    private void setNewMarker()
+    {
+        if (mOpenCVCameraView == null) return;
+
+        Camera.Size resol = mOpenCVCameraView.getResolution();
+
+        marker_x = rand.nextInt(resol.width + 1);
+        marker_y = rand.nextInt(resol.height + 1);
     }
 
     @Override
@@ -116,7 +139,18 @@ public class CaptureActivity extends Activity implements CameraBridgeViewBase.Cv
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
 
         Mat img = inputFrame.rgba();
-        Imgproc.circle(img, new Point(200, 100), 20, new Scalar(200));
+
+        Imgproc.circle(img, new Point(marker_x, marker_y), radius, new Scalar(128, 128, 128), 10);
+
+        double start_deg = 270;
+        double add_deg = 0;
+        if (timer != null)
+            add_deg = 360 * (System.currentTimeMillis() - startTime) / period;
+
+        Imgproc.ellipse(img, new Point(marker_x, marker_y), new Size(radius + 10, radius + 10), 0,
+                start_deg, start_deg + add_deg,
+                new Scalar(255, 255, 255), 10);
+
         return img;
     }
 
@@ -150,8 +184,9 @@ public class CaptureActivity extends Activity implements CameraBridgeViewBase.Cv
         }
 
         mGesturesMenu = menu.addSubMenu("Gesture");
-        mGesturesMenu.add(3,  0, Menu.NONE, "Pointing Thumb Up");
-        mGesturesMenu.add(3,  1, Menu.NONE, "Pointing Thumb Fold");
+        mGesturesMenu.add(3,  0, Menu.NONE, "No_Gesture");
+        mGesturesMenu.add(3,  1, Menu.NONE, "Pointing_Thumb_Up");
+        mGesturesMenu.add(3,  2, Menu.NONE, "Pointing_Thumb_Fold");
 
         return true;
     }
@@ -187,14 +222,75 @@ public class CaptureActivity extends Activity implements CameraBridgeViewBase.Cv
     @Override
     public boolean onTouch(View v, MotionEvent event) {
         Log.i(TAG, "onTouch event");
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
-        String currentDateandTime = sdf.format(new Date());
-        String fileName = Environment.getExternalStorageDirectory().getPath() +
-                "/sample_picture_" + currentDateandTime + ".jpg";
-        mOpenCVCameraView.takePicture(fileName);
-        Toast.makeText(this, fileName + " saved", Toast.LENGTH_SHORT).show();
+
+        if (timer == null) {
+            Log.i(TAG, "Start Gesture Capture");
+            timer = new Timer();
+            timer.schedule(new TimerTask() {
+                boolean isFirst = true;
+
+                @Override
+                public void run() {
+                    if (!isFirst) {
+                        capture();
+                    } else {
+                        isFirst = false;
+                    }
+
+                    setNewMarker();
+                    startTime = System.currentTimeMillis();
+                    Log.d(TAG, "Center (" + marker_x + "," + marker_y + ")");
+                }
+            }, period, period);
+
+            TextView tv = (TextView) findViewById(R.id.sample_text);
+            String gestureType = tv.getText().toString();
+            Toast.makeText(this, "[" + gestureType + "] Capture Started", Toast.LENGTH_SHORT).show();
+        } else {
+            Log.i(TAG, "Stop Gesture Capture");
+            timer.cancel();
+            timer = null;
+
+            Toast.makeText(this, "Capture Stopped", Toast.LENGTH_SHORT).show();
+        }
+
         return false;
     }
+
+    private void capture()
+    {
+        TextView tv = (TextView) findViewById(R.id.sample_text);
+        String gestureType = tv.getText().toString();
+
+        SimpleDateFormat df = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.KOREA);
+        String now = df.format(new Date());
+
+        String marker = marker_x + "_" + marker_y + "_" + radius;
+
+        String fileName = gestureType + "_" + marker + "_" + now + ".jpg";
+
+        File rootDir;
+        if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
+            //Log.i(TAG, "SD card Mounted");
+            rootDir = Environment.getExternalStorageDirectory();
+        } else {
+            //Log.i(TAG, "SD card Not mounted");
+            rootDir = Environment.getRootDirectory();
+        }
+
+        String fileDir = rootDir.getAbsolutePath() + "/gesture_capture/";
+
+        File dir = new File(fileDir);
+        if (! dir.isDirectory())
+            dir.mkdirs();
+
+        String filePath = fileDir + fileName;
+
+        mOpenCVCameraView.takePicture(filePath);
+
+        Log.i(TAG, "saved: " + filePath);
+    }
+
     /**
      * A native method that is implemented by the 'native-lib' native library,
      * which is packaged with this application.
